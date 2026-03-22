@@ -22,7 +22,7 @@ export async function GET(request: NextRequest) {
 
   if (!moment) return NextResponse.json({ error: 'Not found' }, { status: 404 });
 
-  // Fetch all media for this moment (including cloudinary)
+  // Fetch media for this moment (cloudinary rows are already deleted)
   const { data: media } = await supabase
     .from('media')
     .select('media_id, image_url, media_desc, width, height, created_datetime')
@@ -33,10 +33,8 @@ export async function GET(request: NextRequest) {
   const mediaRows = (media || []).map(m => ({
     media_id: m.media_id,
     image_url: m.image_url,
-    url: m.image_url, // full URL for display
+    url: m.image_url,
     media_desc: m.media_desc || '',
-    isCloudinary: (m.image_url || '').includes('cloudinary'),
-    isWorking: !(m.image_url || '').includes('cloudinary'),
   }));
 
   // Parse moment metadata
@@ -46,6 +44,7 @@ export async function GET(request: NextRequest) {
 
   const parsed = {
     datalineobject_id: moment.datalineobject_id,
+    user_id: moment.user_id || '',
     title: raw.object_title || moment.title || '',
     posted_by: raw.posted_by || moment.posted_by || '',
     date: sd && !isNaN(sd.getTime()) ? sd.toISOString().slice(0, 10) : '',
@@ -54,10 +53,25 @@ export async function GET(request: NextRequest) {
     thread_id: moment.thread_id || '',
   };
 
-  // Get all storage files for the available photos panel
+  // Find the file user number for this user_id by checking existing media
+  const { data: userMediaSample } = await supabase
+    .from('media')
+    .select('image_url')
+    .eq('user_id', moment.user_id)
+    .not('image_url', 'like', '%cloudinary%')
+    .not('image_url', 'is', null)
+    .limit(1);
+
+  let fileUserPrefix = '';
+  if (userMediaSample?.length) {
+    const fnMatch = (userMediaSample[0].image_url || '').match(/user(\d+)_/);
+    if (fnMatch) fileUserPrefix = `user${fnMatch[1]}_`;
+  }
+
+  // Get ALL storage files for this user (not just one date)
   const allFiles = await listAllStorageFiles();
-  const user39Files = allFiles
-    .filter(f => f.name.startsWith('user39_'))
+  const userFiles = allFiles
+    .filter(f => fileUserPrefix ? f.name.startsWith(fileUserPrefix) : false)
     .map(f => {
       const m = f.name.match(
         /^user(\d+)_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_(\w+?)_(Original|Large|Medium|Small|ExtraLarge|ExtraSmall)\.(jpg|jpeg|png|gif)$/i
@@ -71,7 +85,12 @@ export async function GET(request: NextRequest) {
       };
     });
 
-  return NextResponse.json({ moment: parsed, media: mediaRows, storageFiles: user39Files });
+  return NextResponse.json({
+    moment: parsed,
+    media: mediaRows,
+    storageFiles: userFiles,
+    fileUserPrefix: fileUserPrefix.replace('_', ''),
+  });
 }
 
 // POST: link/unlink operations

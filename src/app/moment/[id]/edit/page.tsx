@@ -23,6 +23,7 @@ import {
 
 interface MomentData {
   datalineobject_id: string
+  user_id: string
   title: string
   posted_by: string
   date: string
@@ -35,8 +36,6 @@ interface MediaRow {
   image_url: string
   url: string
   media_desc: string
-  isCloudinary: boolean
-  isWorking: boolean
 }
 
 interface StorageFile {
@@ -57,12 +56,13 @@ export default function MomentEditPage() {
   const [moment, setMoment] = useState<MomentData | null>(null)
   const [media, setMedia] = useState<MediaRow[]>([])
   const [storageFiles, setStorageFiles] = useState<StorageFile[]>([])
+  const [fileUserPrefix, setFileUserPrefix] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   // Storage browser state
   const [storageSearch, setStorageSearch] = useState('')
-  const [storageDate, setStorageDate] = useState('')
+  const [storageDate, setStorageDate] = useState('') // empty = all dates
   const [storagePage, setStoragePage] = useState(0)
   const [selectedFiles, setSelectedFiles] = useState<Set<string>>(new Set())
   const [lightbox, setLightbox] = useState<string | null>(null)
@@ -75,19 +75,15 @@ export default function MomentEditPage() {
     setMoment(data.moment)
     setMedia(data.media)
     setStorageFiles(data.storageFiles)
+    setFileUserPrefix(data.fileUserPrefix || '')
     setLoading(false)
-
-    // Auto-set date filter to moment's date
-    if (data.moment?.date) {
-      setStorageDate(data.moment.date)
-    }
+    // Don't auto-filter by date — show all user photos by default
   }, [momentId])
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Current media (linked images)
-  const workingMedia = media.filter(m => m.isWorking)
-  const deadMedia = media.filter(m => m.isCloudinary)
+  // Current media (linked images — cloudinary rows already deleted)
+  const currentMedia = media
 
   // Available dates from storage
   const availableDates = useMemo(() => {
@@ -222,21 +218,17 @@ export default function MomentEditPage() {
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
               <ImageIcon className="h-5 w-5 text-indigo-500" />
-              Current Images ({workingMedia.length})
-              {deadMedia.length > 0 && (
-                <span className="text-xs text-amber-500 font-normal">
-                  + {deadMedia.length} dead Cloudinary
-                </span>
-              )}
+              Current Images ({currentMedia.length})
             </h2>
 
-            {workingMedia.length === 0 && deadMedia.length === 0 ? (
+            {currentMedia.length === 0 ? (
               <div className="mt-4 flex h-40 items-center justify-center rounded-lg border-2 border-dashed border-gray-200">
                 <p className="text-sm text-gray-400">No images linked to this moment</p>
+                <p className="text-xs text-gray-300 mt-1">Use the panel on the right to add photos</p>
               </div>
             ) : (
               <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {workingMedia.map(m => (
+                {currentMedia.map(m => (
                   <div key={m.media_id} className="group relative rounded-lg overflow-hidden border-2 border-green-300">
                     <div className="aspect-square bg-gray-100">
                       <img
@@ -260,21 +252,6 @@ export default function MomentEditPage() {
                     </div>
                   </div>
                 ))}
-                {deadMedia.map(m => (
-                  <div key={m.media_id} className="relative rounded-lg overflow-hidden border-2 border-red-200 opacity-50">
-                    <div className="aspect-square bg-gradient-to-br from-red-100 to-red-200 flex items-center justify-center">
-                      <span className="text-[10px] text-red-400 text-center px-1">Dead Cloudinary</span>
-                    </div>
-                    <button
-                      onClick={() => unlinkImage(m.media_id)}
-                      disabled={saving}
-                      className="absolute top-1 right-1 rounded-full bg-red-500 p-1 text-white opacity-0 transition group-hover:opacity-100"
-                      title="Remove dead link"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  </div>
-                ))}
               </div>
             )}
           </div>
@@ -284,10 +261,16 @@ export default function MomentEditPage() {
         <div>
           <div className="rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
             <div className="flex items-center justify-between">
-              <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Plus className="h-5 w-5 text-green-500" />
-                Add Photos from Storage
-              </h2>
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                  <Plus className="h-5 w-5 text-green-500" />
+                  {moment.posted_by ? `${moment.posted_by}'s Photos` : 'Add Photos from Storage'}
+                </h2>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {storageFiles.length.toLocaleString()} total photos
+                  {fileUserPrefix && <span> · {fileUserPrefix}</span>}
+                </p>
+              </div>
               {selectedFiles.size > 0 && (
                 <button
                   onClick={linkSelected}
