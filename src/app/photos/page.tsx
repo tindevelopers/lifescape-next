@@ -16,12 +16,17 @@ import {
   Grid3X3,
   LayoutGrid,
   ZoomIn,
+  Pencil,
+  Eye,
 } from 'lucide-react'
 
 interface StorageFile {
   name: string
   url: string
   linked: boolean
+  momentId: string | null
+  momentTitle: string | null
+  mediaId: string | null
   userId: string | null
   date: string | null
   time: string | null
@@ -127,10 +132,10 @@ export default function PhotoBrowserPage() {
   }, [moments, momentSearch])
 
   const gridClass = gridSize === 'sm'
-    ? 'grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10'
+    ? 'grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12'
     : gridSize === 'lg'
     ? 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3'
-    : 'grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6'
+    : 'grid-cols-3 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10'
 
   if (loading) {
     return (
@@ -270,7 +275,7 @@ export default function PhotoBrowserPage() {
       </div>
 
       {/* Photo grid */}
-      <div className={`grid gap-2 ${gridClass}`}>
+      <div className={`grid gap-1.5 ${gridClass}`}>
         {pageFiles.map(file => (
           <div
             key={file.name}
@@ -279,9 +284,9 @@ export default function PhotoBrowserPage() {
                 ? 'border-green-300 bg-green-50'
                 : 'border-gray-200 bg-white hover:border-indigo-300'
             }`}
-            onClick={() => setSelectedFile(selectedFile?.name === file.name ? null : file)}
+            onClick={() => setLightboxFile(file)}
           >
-            <div className={`relative ${gridSize === 'sm' ? 'aspect-square' : 'aspect-[4/3]'} bg-gray-100`}>
+            <div className="relative aspect-square bg-gray-100">
               <img
                 src={file.url}
                 alt={file.name}
@@ -304,24 +309,26 @@ export default function PhotoBrowserPage() {
                 )}
               </div>
 
-              {/* Zoom button */}
-              <button
-                onClick={e => { e.stopPropagation(); setLightboxFile(file); }}
-                className="absolute bottom-1 right-1 rounded bg-black/50 p-1 text-white opacity-0 transition group-hover:opacity-100"
-              >
-                <ZoomIn className="h-3 w-3" />
-              </button>
+              {/* Moment title overlay for linked files */}
+              {file.linked && file.momentTitle && (
+                <div className="absolute inset-x-0 bottom-0 bg-black/60 px-1 py-0.5 opacity-0 group-hover:opacity-100 transition">
+                  <p className="truncate text-[9px] text-white">{file.momentTitle}</p>
+                </div>
+              )}
             </div>
 
             {/* Info (medium/large only) */}
             {gridSize !== 'sm' && (
-              <div className="px-2 py-1.5">
+              <div className="px-1.5 py-1">
                 <p className="truncate text-[10px] text-gray-500">{file.name}</p>
-                <div className="flex items-center gap-2 text-[10px] text-gray-400">
+                <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
                   {file.date && <span>{file.date}</span>}
                   {file.userId && <span>{file.userId}</span>}
                   {file.variant && <span className="text-indigo-400">{file.variant}</span>}
                 </div>
+                {file.linked && file.momentTitle && (
+                  <p className="truncate text-[10px] text-green-600 mt-0.5">→ {file.momentTitle}</p>
+                )}
               </div>
             )}
           </div>
@@ -458,30 +465,141 @@ export default function PhotoBrowserPage() {
         </div>
       )}
 
-      {/* Lightbox */}
+      {/* Full-resolution lightbox with moment info */}
       {lightboxFile && (
         <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex bg-black/90 backdrop-blur-sm"
           onClick={() => setLightboxFile(null)}
         >
-          <div className="relative max-h-[90vh] max-w-[90vw]" onClick={e => e.stopPropagation()}>
+          {/* Image area */}
+          <div className="flex-1 flex items-center justify-center p-4" onClick={e => e.stopPropagation()}>
             <img
               src={lightboxFile.url}
               alt={lightboxFile.name}
-              className="max-h-[85vh] max-w-[90vw] rounded-lg object-contain"
-            />
-            <div className="mt-2 text-center">
-              <p className="text-sm text-white/80">{lightboxFile.name}</p>
-              <p className="text-xs text-white/50">
-                {lightboxFile.date} {lightboxFile.time} | {lightboxFile.userId} | {lightboxFile.variant}
-              </p>
-            </div>
-            <button
+              className="max-h-[92vh] max-w-full object-contain rounded"
               onClick={() => setLightboxFile(null)}
-              className="absolute -top-2 -right-2 rounded-full bg-white p-1 shadow-lg"
-            >
-              <X className="h-5 w-5 text-gray-700" />
-            </button>
+            />
+          </div>
+
+          {/* Side panel */}
+          <div
+            className="w-80 flex-shrink-0 bg-gray-900 border-l border-gray-700 overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="p-4">
+              {/* Close button */}
+              <button
+                onClick={() => setLightboxFile(null)}
+                className="mb-4 rounded-lg bg-gray-800 p-1.5 text-gray-400 hover:text-white transition float-right"
+              >
+                <X className="h-4 w-4" />
+              </button>
+
+              <h3 className="text-sm font-semibold text-white break-all pr-8">{lightboxFile.name}</h3>
+
+              {/* Metadata */}
+              <div className="mt-3 space-y-2 text-sm">
+                {lightboxFile.date && (
+                  <div className="flex items-center gap-2 text-gray-300">
+                    <Calendar className="h-4 w-4 text-gray-500" />
+                    {lightboxFile.date} {lightboxFile.time}
+                  </div>
+                )}
+                {lightboxFile.userId && (
+                  <div className="flex items-center gap-2 text-gray-300">
+                    <User className="h-4 w-4 text-gray-500" />
+                    {lightboxFile.userId}
+                  </div>
+                )}
+                {lightboxFile.variant && (
+                  <div className="flex items-center gap-2 text-gray-300">
+                    <ImageIcon className="h-4 w-4 text-gray-500" />
+                    {lightboxFile.variant} · {lightboxFile.ext}
+                  </div>
+                )}
+              </div>
+
+              {/* Link status */}
+              <div className="mt-4 rounded-lg bg-gray-800 p-3">
+                {lightboxFile.linked ? (
+                  <>
+                    <div className="flex items-center gap-2 text-green-400 text-sm font-medium">
+                      <Link2 className="h-4 w-4" /> Linked to moment
+                    </div>
+                    {lightboxFile.momentTitle && (
+                      <p className="mt-1 text-sm text-gray-300">{lightboxFile.momentTitle}</p>
+                    )}
+                    <div className="mt-3 flex gap-2">
+                      {lightboxFile.momentId && (
+                        <>
+                          <a
+                            href={`/moment/${lightboxFile.momentId}`}
+                            className="flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 transition"
+                          >
+                            <Eye className="h-3 w-3" /> View
+                          </a>
+                          <a
+                            href={`/moment/${lightboxFile.momentId}/edit`}
+                            className="flex items-center gap-1 rounded-lg bg-gray-700 px-3 py-1.5 text-xs font-medium text-gray-200 hover:bg-gray-600 transition"
+                          >
+                            <Pencil className="h-3 w-3" /> Edit
+                          </a>
+                        </>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-2 text-amber-400 text-sm font-medium">
+                      <Unlink className="h-4 w-4" /> Orphan — not linked
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSelectedFile(lightboxFile)
+                        setLinkingFile(lightboxFile.name)
+                        setLightboxFile(null)
+                      }}
+                      className="mt-2 flex items-center gap-1 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-indigo-500 transition"
+                    >
+                      <Link2 className="h-3 w-3" /> Link to Moment
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Full URL for debugging */}
+              <div className="mt-4">
+                <p className="text-xs text-gray-500 mb-1">Storage URL</p>
+                <input
+                  readOnly
+                  value={lightboxFile.url}
+                  className="w-full rounded bg-gray-800 border border-gray-700 px-2 py-1 text-[10px] text-gray-400 select-all"
+                  onClick={e => (e.target as HTMLInputElement).select()}
+                />
+              </div>
+
+              {/* Navigate prev/next in filtered list */}
+              <div className="mt-4 flex justify-between">
+                <button
+                  onClick={() => {
+                    const idx = filtered.findIndex(f => f.name === lightboxFile.name)
+                    if (idx > 0) setLightboxFile(filtered[idx - 1])
+                  }}
+                  className="rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 transition"
+                >
+                  ← Previous
+                </button>
+                <button
+                  onClick={() => {
+                    const idx = filtered.findIndex(f => f.name === lightboxFile.name)
+                    if (idx < filtered.length - 1) setLightboxFile(filtered[idx + 1])
+                  }}
+                  className="rounded-lg bg-gray-800 px-3 py-1.5 text-xs text-gray-300 hover:bg-gray-700 transition"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}
