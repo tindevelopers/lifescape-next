@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, Hash, User, Settings } from 'lucide-react';
+import { LayoutDashboard, Hash, User, Settings, Image as ImageIcon } from 'lucide-react';
 
 const navItems = [
   { href: '/', label: 'Home', icon: LayoutDashboard },
   { href: '/channels', label: 'Channels', icon: Hash },
+  { href: '/photos', label: 'Photos', icon: ImageIcon },
   { href: '/profile', label: 'Profile', icon: User },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];

@@ -137,6 +137,107 @@ export async function getLikesForMoment(momentId: string) {
   return data || [];
 }
 
+// --- Storage Browser ---
+
+export async function listStorageFiles(limit = 1000, offset = 0) {
+  const { data, error } = await supabase.storage
+    .from('lifescape-images')
+    .list('', { limit, offset, sortBy: { column: 'name', order: 'asc' } });
+  if (error) { console.error('listStorageFiles error:', error); return []; }
+  return (data || []).filter(f => f.id !== null); // only files, not folders
+}
+
+export async function listAllStorageFiles() {
+  const all: any[] = [];
+  for (let off = 0; off < 50000; off += 1000) {
+    const batch = await listStorageFiles(1000, off);
+    if (!batch.length) break;
+    all.push(...batch);
+    if (batch.length < 1000) break;
+  }
+  return all;
+}
+
+export function storagePublicUrl(filename: string): string {
+  return `${STORAGE_BASE}${filename}`;
+}
+
+// Get media rows grouped by storage filename for link status
+export async function getLinkedFilenames(): Promise<Set<string>> {
+  const linked: string[] = [];
+  for (let off = 0; off < 50000; off += 1000) {
+    const { data } = await supabase
+      .from('media')
+      .select('image_url')
+      .not('image_url', 'is', null)
+      .not('image_url', 'like', '%cloudinary%')
+      .range(off, off + 999);
+    if (!data || !data.length) break;
+    linked.push(...data.map((r: any) => r.image_url.split('/').pop()));
+  }
+  return new Set(linked);
+}
+
+// Get unlinked moments (no supabase images) for the linking dropdown
+export async function getUnlinkedMoments(userId: string) {
+  // Get all moments
+  const allMoments: any[] = [];
+  for (let off = 0; off < 5000; off += 1000) {
+    const { data } = await supabase
+      .from('dataline_objects')
+      .select('datalineobject_id, title, start_date, raw_data')
+      .eq('user_id', userId)
+      .not('title', 'is', null)
+      .order('start_date', { ascending: false, nullsFirst: false })
+      .range(off, off + 999);
+    if (!data || !data.length) break;
+    allMoments.push(...data);
+  }
+
+  // Get moments that have supabase images
+  const { data: supaMedia } = await supabase
+    .from('media')
+    .select('datalineobject_id')
+    .eq('user_id', userId)
+    .not('image_url', 'like', '%cloudinary%')
+    .not('image_url', 'is', null);
+  const withSupa = new Set((supaMedia || []).map((m: any) => m.datalineobject_id));
+
+  return allMoments.map(m => {
+    let raw: any = {};
+    try { raw = m.raw_data ? JSON.parse(m.raw_data) : {}; } catch {}
+    const sd = m.start_date ? new Date(Number(m.start_date)) : null;
+    return {
+      datalineobject_id: m.datalineobject_id,
+      title: raw.object_title || m.title || 'Untitled',
+      date: sd && !isNaN(sd.getTime()) ? sd.toISOString().slice(0, 10) : '',
+      hasImages: withSupa.has(m.datalineobject_id),
+    };
+  });
+}
+
+// Link a storage file to a moment
+export async function linkFileToMoment(filename: string, momentId: string, userId: string) {
+  const mediaId = crypto.randomUUID();
+  const { error } = await supabase.from('media').insert({
+    media_id: mediaId,
+    user_id: userId,
+    datalineobject_id: momentId,
+    image_url: storagePublicUrl(filename),
+    media_desc: '',
+    created_datetime: Date.now(),
+  });
+  if (error) { console.error('linkFileToMoment error:', error); return false; }
+  return true;
+}
+
+// Unlink a media row
+export async function unlinkMedia(mediaId: string) {
+  const { error } = await supabase.from('media').delete().eq('media_id', mediaId);
+  if (error) { console.error('unlinkMedia error:', error); return false; }
+  return true;
+}
+
 // --- Storage ---
 
 export async function uploadFile(file: File, path: string) {
