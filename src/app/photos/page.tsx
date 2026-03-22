@@ -39,14 +39,12 @@ interface MomentOption {
   datalineobject_id: string
   title: string
   date: string
-  hasImages: boolean
 }
 
 const PAGE_SIZES = [60, 120, 240, 500, 1000]
 
 export default function PhotoBrowserPage() {
   const [files, setFiles] = useState<StorageFile[]>([])
-  const [moments, setMoments] = useState<MomentOption[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [filterUser, setFilterUser] = useState<string>('all')
@@ -61,6 +59,8 @@ export default function PhotoBrowserPage() {
   const [gridSize, setGridSize] = useState<'sm' | 'md' | 'lg'>('md')
   const [lightboxFile, setLightboxFile] = useState<StorageFile | null>(null)
   const [userNames, setUserNames] = useState<Record<string, string>>({})
+  const [userCounts, setUserCounts] = useState<Record<string, number>>({})
+  const [userMoments, setUserMoments] = useState<Record<string, MomentOption[]>>({})
 
   // Load data
   useEffect(() => {
@@ -68,8 +68,9 @@ export default function PhotoBrowserPage() {
       .then(r => r.json())
       .then(data => {
         setFiles(data.files || [])
-        setMoments(data.moments || [])
         setUserNames(data.userNames || {})
+        setUserCounts(data.userCounts || {})
+        setUserMoments(data.userMoments || {})
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -126,13 +127,24 @@ export default function PhotoBrowserPage() {
     setLinkingInProgress(false)
   }, [])
 
+  // Get moments for the selected file's user (or filtered user)
+  const relevantMoments = useMemo(() => {
+    // If we have a selected file, use its userId to find that user's moments
+    const selectedUserId = selectedFile?.userId || filterUser
+    if (selectedUserId && selectedUserId !== 'all' && userMoments[selectedUserId]) {
+      return userMoments[selectedUserId]
+    }
+    // Fallback: combine all user moments
+    return Object.values(userMoments).flat()
+  }, [selectedFile, filterUser, userMoments])
+
   const filteredMoments = useMemo(() => {
-    if (!momentSearch) return moments.slice(0, 20)
+    if (!momentSearch) return relevantMoments.slice(0, 30)
     const q = momentSearch.toLowerCase()
-    return moments.filter(m =>
+    return relevantMoments.filter(m =>
       m.title.toLowerCase().includes(q) || m.date.includes(q)
-    ).slice(0, 20)
-  }, [moments, momentSearch])
+    ).slice(0, 30)
+  }, [relevantMoments, momentSearch])
 
   const gridClass = gridSize === 'sm'
     ? 'grid-cols-6 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12'
@@ -190,7 +202,9 @@ export default function PhotoBrowserPage() {
         >
           <option value="all">All users ({userIds.length})</option>
           {userIds.map(u => (
-            <option key={u} value={u}>{userNames[u] ? `${userNames[u]} (${u})` : u}</option>
+            <option key={u} value={u}>
+              {userNames[u] ? `${userNames[u]}` : u} — {userCounts[u] || 0} photos
+            </option>
           ))}
         </select>
 
@@ -390,9 +404,15 @@ export default function PhotoBrowserPage() {
                   </span>
                 </div>
                 <div className="mt-1 flex items-center gap-4 text-sm text-gray-500">
-                  {selectedFile.userId && (
+                  {(selectedFile.userName || selectedFile.userId) && (
                     <span className="flex items-center gap-1">
-                      <User className="h-3.5 w-3.5" /> {selectedFile.userId}
+                      <User className="h-3.5 w-3.5" />
+                      {selectedFile.userName && selectedFile.userName !== selectedFile.userId
+                        ? selectedFile.userName
+                        : selectedFile.userId}
+                      {selectedFile.userId && relevantMoments.length > 0 && (
+                        <span className="text-xs text-indigo-500">({relevantMoments.length} moments)</span>
+                      )}
                     </span>
                   )}
                   {selectedFile.date && (

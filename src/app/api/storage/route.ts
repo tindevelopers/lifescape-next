@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server';
 import {
   supabase,
   listAllStorageFiles,
-  getUnlinkedMoments,
   linkFileToMoment,
   unlinkMedia,
   storagePublicUrl,
@@ -10,18 +9,14 @@ import {
 import { CURRENT_USER } from '@/lib/auth';
 
 export async function GET() {
-  // Fetch in parallel: storage files, all media rows (for link mapping), moments
-  const [files, momentsP] = await Promise.all([
-    listAllStorageFiles(),
-    getUnlinkedMoments(CURRENT_USER.user_id),
-  ]);
+  const files = await listAllStorageFiles();
 
   // Get all non-cloudinary media rows to map filename -> moment
   const mediaRows: any[] = [];
   for (let off = 0; off < 50000; off += 1000) {
     const { data } = await supabase
       .from('media')
-      .select('image_url, datalineobject_id, media_id')
+      .select('image_url, datalineobject_id, media_id, user_id')
       .not('image_url', 'is', null)
       .not('image_url', 'like', '%cloudinary%')
       .range(off, off + 999);
@@ -36,53 +31,49 @@ export async function GET() {
     if (fname) linkMap[fname] = { momentId: row.datalineobject_id, mediaId: row.media_id };
   }
 
-  // Build momentId -> title map from moments list
-  const momentTitles: Record<string, string> = {};
-  for (const m of momentsP) {
-    momentTitles[m.datalineobject_id] = m.title;
+  // Get ALL moments with titles and user_ids for the linking dropdown
+  const allMoments: any[] = [];
+  for (let off = 0; off < 10000; off += 1000) {
+    const { data } = await supabase
+      .from('dataline_objects')
+      .select('datalineobject_id, title, start_date, user_id, raw_data')
+      .not('title', 'is', null)
+      .order('start_date', { ascending: false, nullsFirst: false })
+      .range(off, off + 999);
+    if (!data || !data.length) break;
+    allMoments.push(...data);
   }
 
-  // Build user number -> display name mapping
-  // Step 1: media rows give us fileUserNum -> firebase_uid
-  const userNumToUid: Record<string, string> = {};
-  for (const row of mediaRows) {
-    const fnameMatch = (row.image_url || '').match(/user(\d+)_/);
-    if (fnameMatch) {
-      // We need the user_id from this media row - re-fetch with user_id
-      const key = `user${fnameMatch[1]}`;
-      if (!userNumToUid[key]) {
-        // Look up user_id from linked moment
-        const mid = row.datalineobject_id;
-        if (mid) {
-          const mom = momentsP.find((m: any) => m.datalineobject_id === mid);
-          // momentsP doesn't have user_id, but we can derive from the existing data
-        }
-      }
+  // Build momentId -> title map, and user_id -> name map
+  const momentTitles: Record<string, string> = {};
+  const uidToName: Record<string, string> = {};
+  const momentsByUserId: Record<string, any[]> = {};
+
+  for (const m of allMoments) {
+    let raw: any = {};
+    try { raw = typeof m.raw_data === 'string' ? JSON.parse(m.raw_data) : (m.raw_data || {}); } catch {}
+    const title = raw.object_title || m.title || 'Untitled';
+    momentTitles[m.datalineobject_id] = title;
+
+    if (raw.posted_by && m.user_id && !uidToName[m.user_id]) {
+      uidToName[m.user_id] = raw.posted_by;
+    }
+
+    // Group moments by user_id
+    if (m.user_id) {
+      if (!momentsByUserId[m.user_id]) momentsByUserId[m.user_id] = [];
+      const sd = m.start_date ? new Date(Number(m.start_date)) : null;
+      momentsByUserId[m.user_id].push({
+        datalineobject_id: m.datalineobject_id,
+        title,
+        date: sd && !isNaN(sd.getTime()) ? sd.toISOString().slice(0, 10) : '',
+      });
     }
   }
 
-  // Step 2: Get display names from dataline_objects (user_id -> posted_by via raw_data)
-  const uidToName: Record<string, string> = {};
-  const { data: nameRows } = await supabase
-    .from('dataline_objects')
-    .select('user_id, raw_data')
-    .not('user_id', 'is', null)
-    .limit(2000);
-  for (const row of (nameRows || [])) {
-    if (uidToName[row.user_id]) continue;
-    let raw: any = {};
-    try { raw = typeof row.raw_data === 'string' ? JSON.parse(row.raw_data) : row.raw_data; } catch {}
-    if (raw?.posted_by) uidToName[row.user_id] = raw.posted_by;
-  }
-
-  // Step 3: Get user_id for each file user number from media table
-  const { data: userMediaRows } = await supabase
-    .from('media')
-    .select('user_id, image_url')
-    .not('image_url', 'is', null)
-    .not('image_url', 'like', '%cloudinary%')
-    .limit(5000);
-  for (const row of (userMediaRows || [])) {
+  // Build fileUserNum -> firebase_uid from media rows
+  const userNumToUid: Record<string, string> = {};
+  for (const row of mediaRows) {
     const fnm = (row.image_url || '').match(/user(\d+)_/);
     if (fnm && row.user_id) {
       userNumToUid[`user${fnm[1]}`] = row.user_id;
@@ -95,13 +86,19 @@ export async function GET() {
     userNames[userNum] = uidToName[uid] || userNum;
   }
 
-  // Parse filename metadata
+  // Count images per userId (from filenames)
+  const userCounts: Record<string, number> = {};
   const parsed = files.map(f => {
     const m = f.name.match(
       /^user(\d+)_(\d{4})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})_(\w+?)_(Original|Large|Medium|Small|ExtraLarge|ExtraSmall)\.(jpg|jpeg|png|gif)$/i
     );
     const link = linkMap[f.name];
     const userId = m ? `user${m[1]}` : null;
+
+    // Count
+    const countKey = userId || '_unnamed';
+    userCounts[countKey] = (userCounts[countKey] || 0) + 1;
+
     return {
       name: f.name,
       url: storagePublicUrl(f.name),
@@ -118,7 +115,18 @@ export async function GET() {
     };
   });
 
-  return NextResponse.json({ files: parsed, moments: momentsP, userNames });
+  // Build user moments map: userNum -> moments[]
+  const userMoments: Record<string, any[]> = {};
+  for (const [userNum, uid] of Object.entries(userNumToUid)) {
+    userMoments[userNum] = momentsByUserId[uid] || [];
+  }
+
+  return NextResponse.json({
+    files: parsed,
+    userNames,
+    userCounts,
+    userMoments,
+  });
 }
 
 export async function POST(request: NextRequest) {
