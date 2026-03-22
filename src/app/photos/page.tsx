@@ -465,7 +465,7 @@ export default function PhotoBrowserPage() {
                             className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-indigo-50 transition disabled:opacity-50"
                           >
                             <span className={`h-2 w-2 rounded-full flex-shrink-0 ${
-                              m.hasImages ? 'bg-green-400' : 'bg-amber-400'
+                              'bg-gray-300'
                             }`} />
                             <span className="truncate flex-1">{m.title}</span>
                             <span className="text-xs text-gray-400 flex-shrink-0">{m.date}</span>
