@@ -13,6 +13,7 @@ import {
   Calendar,
   ExternalLink,
   ArrowLeft,
+  Pencil,
 } from 'lucide-react'
 import type { Moment, Comment } from '@/types/index'
 
@@ -73,14 +74,23 @@ export function MomentDetail({
 
   return (
     <div className="mx-auto max-w-4xl px-4 py-6 sm:px-6 lg:px-8">
-      {/* Back button */}
-      <button
-        onClick={() => router.back()}
-        className="mb-4 flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900"
-      >
-        <ArrowLeft className="h-4 w-4" />
-        Back
-      </button>
+      {/* Back + Edit buttons */}
+      <div className="mb-4 flex items-center justify-between">
+        <button
+          onClick={() => router.back()}
+          className="flex items-center gap-1.5 text-sm font-medium text-gray-500 transition-colors hover:text-gray-900"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+        <button
+          onClick={() => router.push(`/moment/${moment.datalineobject_id}/edit`)}
+          className="flex items-center gap-1.5 rounded-lg bg-indigo-50 px-3 py-1.5 text-sm font-medium text-indigo-600 transition hover:bg-indigo-100"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+          Edit Images
+        </button>
+      </div>
 
       {/* Image carousel */}
       {hasMedia && (

@@ -36,7 +36,7 @@ interface MomentOption {
   hasImages: boolean
 }
 
-const PAGE_SIZE = 60
+const PAGE_SIZES = [60, 120, 240, 500, 1000]
 
 export default function PhotoBrowserPage() {
   const [files, setFiles] = useState<StorageFile[]>([])
@@ -47,6 +47,7 @@ export default function PhotoBrowserPage() {
   const [filterLinked, setFilterLinked] = useState<string>('all')
   const [filterDate, setFilterDate] = useState<string>('')
   const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(240)
   const [selectedFile, setSelectedFile] = useState<StorageFile | null>(null)
   const [linkingFile, setLinkingFile] = useState<string | null>(null)
   const [momentSearch, setMomentSearch] = useState('')
@@ -88,8 +89,8 @@ export default function PhotoBrowserPage() {
     })
   }, [files, searchTerm, filterUser, filterLinked, filterDate])
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE)
-  const pageFiles = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE)
+  const totalPages = Math.ceil(filtered.length / pageSize)
+  const pageFiles = filtered.slice(page * pageSize, (page + 1) * pageSize)
 
   const stats = useMemo(() => ({
     total: files.length,
@@ -99,7 +100,7 @@ export default function PhotoBrowserPage() {
   }), [files])
 
   // Reset page on filter change
-  useEffect(() => { setPage(0) }, [searchTerm, filterUser, filterLinked, filterDate])
+  useEffect(() => { setPage(0) }, [searchTerm, filterUser, filterLinked, filterDate, pageSize])
 
   // Link file to moment
   const handleLink = useCallback(async (filename: string, momentId: string) => {
@@ -205,6 +206,17 @@ export default function PhotoBrowserPage() {
           <option value="">All dates ({dates.length})</option>
           {dates.map(d => (
             <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+
+        {/* Page size */}
+        <select
+          value={pageSize}
+          onChange={e => setPageSize(Number(e.target.value))}
+          className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm"
+        >
+          {PAGE_SIZES.map(s => (
+            <option key={s} value={s}>{s} per page</option>
           ))}
         </select>
 
