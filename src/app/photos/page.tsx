@@ -28,6 +28,7 @@ interface StorageFile {
   momentTitle: string | null
   mediaId: string | null
   userId: string | null
+  userName: string | null
   date: string | null
   time: string | null
   variant: string | null
@@ -59,6 +60,7 @@ export default function PhotoBrowserPage() {
   const [linkingInProgress, setLinkingInProgress] = useState(false)
   const [gridSize, setGridSize] = useState<'sm' | 'md' | 'lg'>('md')
   const [lightboxFile, setLightboxFile] = useState<StorageFile | null>(null)
+  const [userNames, setUserNames] = useState<Record<string, string>>({})
 
   // Load data
   useEffect(() => {
@@ -67,6 +69,7 @@ export default function PhotoBrowserPage() {
       .then(data => {
         setFiles(data.files || [])
         setMoments(data.moments || [])
+        setUserNames(data.userNames || {})
         setLoading(false)
       })
       .catch(() => setLoading(false))
@@ -187,7 +190,7 @@ export default function PhotoBrowserPage() {
         >
           <option value="all">All users ({userIds.length})</option>
           {userIds.map(u => (
-            <option key={u} value={u}>{u}</option>
+            <option key={u} value={u}>{userNames[u] ? `${userNames[u]} (${u})` : u}</option>
           ))}
         </select>
 
@@ -323,7 +326,11 @@ export default function PhotoBrowserPage() {
                 <p className="truncate text-[10px] text-gray-500">{file.name}</p>
                 <div className="flex items-center gap-1.5 text-[10px] text-gray-400">
                   {file.date && <span>{file.date}</span>}
-                  {file.userId && <span>{file.userId}</span>}
+                  {file.userName && file.userName !== file.userId ? (
+                    <span className="text-gray-600 font-medium">{file.userName}</span>
+                  ) : file.userId && (
+                    <span>{file.userId}</span>
+                  )}
                   {file.variant && <span className="text-indigo-400">{file.variant}</span>}
                 </div>
                 {file.linked && file.momentTitle && (
@@ -505,10 +512,15 @@ export default function PhotoBrowserPage() {
                     {lightboxFile.date} {lightboxFile.time}
                   </div>
                 )}
-                {lightboxFile.userId && (
+                {(lightboxFile.userName || lightboxFile.userId) && (
                   <div className="flex items-center gap-2 text-gray-300">
                     <User className="h-4 w-4 text-gray-500" />
-                    {lightboxFile.userId}
+                    <span>
+                      {lightboxFile.userName && lightboxFile.userName !== lightboxFile.userId
+                        ? <><span className="text-white font-medium">{lightboxFile.userName}</span> <span className="text-gray-500 text-xs">({lightboxFile.userId})</span></>
+                        : lightboxFile.userId
+                      }
+                    </span>
                   </div>
                 )}
                 {lightboxFile.variant && (
